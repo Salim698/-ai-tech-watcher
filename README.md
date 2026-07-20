@@ -6,9 +6,13 @@ Agent d'automatisation n8n qui surveille automatiquement plusieurs sources tech,
 
 ## 📸 Aperçu
 
-<!-- Remplace ces lignes par tes propres captures d'écran, glissées dans /screenshots -->
-| Vue du workflow | Rapport reçu |
-|---|---|
+<img width="1733" height="802" alt="image" src="https://github.com/user-attachments/assets/389731cb-2fbf-407c-8eb0-65fb24a84dff" />
+
+<img width="1250" height="990" alt="image" src="https://github.com/user-attachments/assets/79e28ca8-fd7b-4a0b-a2be-2ebdf588217f" />
+
+
+
+
 | ![Workflow](screenshots/workflow.png) | ![Rapport](screenshots/rapport.png) |
 
 ## ⚙️ Comment ça marche
@@ -91,4 +95,5 @@ Ce projet est sous licence MIT — libre d'utilisation, de modification et de re
 
 ## 🙋 Contact
 
-<!-- Ajoute tes liens (LinkedIn, portfolio, email...) -->
+- 📧 [salimnombre4@gmail.com](mailto:salimnombre4@gmail.com)
+- 💼 [LinkedIn](https://www.linkedin.com/in/salim-nombre)

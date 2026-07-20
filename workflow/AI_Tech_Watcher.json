@@ -1,0 +1,483 @@
+{
+  "name": "AI Tech Watcher",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 8
+            }
+          ]
+        }
+      },
+      "id": "node-cron",
+      "name": "Cron (tous les jours 8h)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -200,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://openai.com/news/rss.xml",
+        "options": {}
+      },
+      "id": "node-rss-0",
+      "name": "RSS – OpenAI",
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1.2,
+      "position": [
+        60,
+        0
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "url": "https://huggingface.co/blog/feed.xml",
+        "options": {}
+      },
+      "id": "node-rss-1",
+      "name": "RSS – Hugging Face",
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1.2,
+      "position": [
+        60,
+        130
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "url": "https://blog.google/technology/ai/rss/",
+        "options": {}
+      },
+      "id": "node-rss-2",
+      "name": "RSS – Google AI",
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1.2,
+      "position": [
+        60,
+        260
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "url": "https://blog.n8n.io/rss/",
+        "options": {}
+      },
+      "id": "node-rss-3",
+      "name": "RSS – n8n",
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1.2,
+      "position": [
+        60,
+        390
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "url": "https://github.blog/feed/",
+        "options": {}
+      },
+      "id": "node-rss-4",
+      "name": "RSS – GitHub",
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1.2,
+      "position": [
+        60,
+        520
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "url": "https://feeds.feedburner.com/TheHackersNews",
+        "options": {}
+      },
+      "id": "node-rss-5",
+      "name": "RSS – Hacker News (sec)",
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1.2,
+      "position": [
+        60,
+        650
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "url": "https://aws.amazon.com/blogs/aws/feed/",
+        "options": {}
+      },
+      "id": "node-rss-6",
+      "name": "RSS – AWS",
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1.2,
+      "position": [
+        60,
+        780
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "url": "https://cloudblog.withgoogle.com/rss/",
+        "options": {}
+      },
+      "id": "node-rss-7",
+      "name": "RSS – Google Cloud",
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1.2,
+      "position": [
+        60,
+        910
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Nettoyage : deduplication par lien + filtre articles < 24h\nconst seen = new Set();\nconst output = [];\nconst cutoff = Date.now() - 24 * 60 * 60 * 1000;\n\nfor (const item of $input.all()) {\n  const j = item.json;\n  const link = (j.link || j.url || '').toString().trim().replace(/\\/$/, '');\n  if (!link || seen.has(link)) continue;\n\n  const dateStr = j.isoDate || j.pubDate || j.date || j.published || null;\n  const ts = dateStr ? Date.parse(dateStr) : NaN;\n  if (!isNaN(ts) && ts < cutoff) continue;\n\n  let source = '';\n  try { source = new URL(link).hostname.replace(/^www\\./, ''); } catch (e) {}\n\n  seen.add(link);\n  output.push({ json: {\n    title: (j.title || '(sans titre)').toString().trim(),\n    link,\n    source,\n    snippet: (j.contentSnippet || j.content || j.summary || '').toString().replace(/\\s+/g, ' ').slice(0, 500),\n    pubDate: dateStr || '',\n  }});\n}\nreturn output;"
+      },
+      "id": "node-dedup",
+      "name": "Nettoyage + filtre 24h",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        320,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Construit la requete Gemini a partir de tous les articles nettoyes\nconst articles = $input.all().map(i => ({\n  titre: i.json.title, source: i.json.source, lien: i.json.link,\n  extrait: i.json.snippet, date: i.json.pubDate,\n}));\n\nconst prompt = `Tu es un analyste tech francophone. Voici une liste d'articles publies recemment (titre, source, lien, extrait).\n\nPour CHAQUE article :\n1. Resume-le en 1 a 2 phrases percutantes, en francais.\n2. Attribue une importance : CRITIQUE, IMPORTANT ou MINEUR.\n   - CRITIQUE = nouveau modele IA majeur, faille de securite critique, changement de politique/prix majeur.\n   - IMPORTANT = nouvelle fonctionnalite notable, mise a jour significative, partenariat important.\n   - MINEUR = actualite mineure, article de fond, mise a jour cosmetique.\n\nReponds UNIQUEMENT avec du JSON valide, sans texte avant ou apres, sans balises markdown.\nFormat EXACT :\n{\"articles\":[{\"titre\":\"...\",\"source\":\"...\",\"lien\":\"...\",\"resume\":\"...\",\"importance\":\"CRITIQUE\"}]}\n\nArticles a analyser :\n${JSON.stringify(articles, null, 2)}`;\n\nconst body = {\n  contents: [ { role: \"user\", parts: [ { text: prompt } ] } ],\n  generationConfig: { temperature: 0.3, responseMimeType: \"application/json\" }\n};\n\nreturn [{ json: { body, count: articles.length } }];"
+      },
+      "id": "node-prepare",
+      "name": "Préparer requête Gemini",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        540,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-goog-api-key",
+              "value": "REMPLACE_PAR_TA_CLE_GEMINI"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.body }}",
+        "options": {}
+      },
+      "id": "node-gemini",
+      "name": "Gemini – Analyse",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        760,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse la reponse Gemini + trie par importance\nconst res = $input.first().json;\n\nlet text = '';\ntry {\n  text = res.candidates[0].content.parts[0].text;\n} catch (e) {\n  throw new Error('Reponse Gemini inattendue : ' + JSON.stringify(res).slice(0, 600));\n}\n\ntext = text.trim().replace(/^```(?:json)?/i, '').replace(/```$/, '').trim();\n\nlet parsed;\ntry { parsed = JSON.parse(text); }\ncatch (e) { throw new Error('JSON Gemini invalide : ' + text.slice(0, 600)); }\n\nconst order = { CRITIQUE: 0, IMPORTANT: 1, MINEUR: 2 };\nconst articles = (parsed.articles || []).sort((a, b) =>\n  (order[(a.importance || '').toUpperCase()] ?? 3) - (order[(b.importance || '').toUpperCase()] ?? 3)\n);\nreturn [{ json: { articles } }];"
+      },
+      "id": "node-parse",
+      "name": "Parser réponse",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        980,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Genere le rapport : Telegram (decoupe en morceaux <4096) + Gmail (HTML)\nconst articles = $input.first().json.articles || [];\nconst date = new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });\nconst emoji = { CRITIQUE: '🔴', IMPORTANT: '🟠', MINEUR: '⚪' };\nconst color = { CRITIQUE: '#e53935', IMPORTANT: '#fb8c00', MINEUR: '#9e9e9e' };\n\nlet tg = `*🗞️ Veille Tech — ${date}*\\n\\n`;\nif (articles.length === 0) {\n  tg += '_Aucune actualite notable dans les dernieres 24h._';\n} else {\n  for (const a of articles) {\n    const e = emoji[(a.importance || '').toUpperCase()] || '⚪';\n    tg += `${e} *${a.titre}*\\n${a.resume}\\n_${a.source}_ — [lire](${a.lien})\\n\\n`;\n  }\n}\n\nlet rows = '';\nfor (const a of articles) {\n  const imp = (a.importance || 'MINEUR').toUpperCase();\n  const c = color[imp] || '#9e9e9e';\n  rows += `<div style=\"border-left:4px solid ${c};padding:8px 14px;margin:0 0 14px;background:#fafafa;\">`\n    + `<span style=\"font-size:11px;font-weight:bold;color:${c};\">${imp}</span>`\n    + `<h3 style=\"margin:4px 0;font-size:16px;\">${a.titre}</h3>`\n    + `<p style=\"margin:4px 0;color:#333;\">${a.resume}</p>`\n    + `<p style=\"margin:4px 0;font-size:12px;color:#777;\">${a.source} — <a href=\"${a.lien}\">Lire l'article</a></p></div>`;\n}\nconst html = `<div style=\"font-family:Arial,sans-serif;max-width:640px;margin:auto;\">`\n  + `<h1 style=\"font-size:20px;\">🗞️ Veille Tech — ${date}</h1>`\n  + `<p style=\"color:#666;\">${articles.length} article(s) analyse(s).</p>`\n  + (rows || '<p><em>Aucune actualite notable dans les dernieres 24h.</em></p>')\n  + `<hr><p style=\"font-size:11px;color:#aaa;\">Genere automatiquement avec n8n + Gemini.</p></div>`;\n\n// Decoupe le message Telegram en morceaux <= 4000 caracteres (limite Telegram = 4096)\nconst MAX = 4000;\nconst chunks = [];\nlet buf = '';\nfor (const bloc of tg.split('\\n\\n')) {\n  if ((buf + bloc + '\\n\\n').length > MAX) {\n    if (buf) chunks.push(buf.trim());\n    buf = '';\n  }\n  buf += bloc + '\\n\\n';\n}\nif (buf.trim()) chunks.push(buf.trim());\n\nconst subject = `🗞️ Veille Tech — ${date} (${articles.length})`;\n\n// 1 item par morceau Telegram ; html + subject copies sur chaque item\nreturn chunks.map((c, i) => ({\n  json: { telegram: c, html, subject, part: i + 1, totalParts: chunks.length }\n}));"
+      },
+      "id": "node-report",
+      "name": "Générer rapport",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "REMPLACE_PAR_TON_CHAT_ID",
+        "text": "={{ $json.telegram }}",
+        "additionalFields": {
+          "parse_mode": "Markdown"
+        }
+      },
+      "id": "node-telegram",
+      "name": "Envoi Telegram",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1440,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "maxItems": 1
+      },
+      "id": "node-limit",
+      "name": "Limit (1 seul email)",
+      "type": "n8n-nodes-base.limit",
+      "typeVersion": 1,
+      "position": [
+        1440,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "REMPLACE_PAR_TON_EMAIL@gmail.com",
+        "toEmail": "REMPLACE_PAR_EMAIL_DESTINATAIRE@exemple.com",
+        "subject": "={{ $json.subject }}",
+        "emailFormat": "html",
+        "html": "={{ $json.html }}",
+        "options": {}
+      },
+      "id": "node-email",
+      "name": "Send an Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        1660,
+        500
+      ]
+    }
+  ],
+  "connections": {
+    "Cron (tous les jours 8h)": {
+      "main": [
+        [
+          {
+            "node": "RSS – OpenAI",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "RSS – Hugging Face",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "RSS – Google AI",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "RSS – n8n",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "RSS – GitHub",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "RSS – Hacker News (sec)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "RSS – AWS",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "RSS – Google Cloud",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "RSS – OpenAI": {
+      "main": [
+        [
+          {
+            "node": "Nettoyage + filtre 24h",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "RSS – Hugging Face": {
+      "main": [
+        [
+          {
+            "node": "Nettoyage + filtre 24h",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "RSS – Google AI": {
+      "main": [
+        [
+          {
+            "node": "Nettoyage + filtre 24h",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "RSS – n8n": {
+      "main": [
+        [
+          {
+            "node": "Nettoyage + filtre 24h",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "RSS – GitHub": {
+      "main": [
+        [
+          {
+            "node": "Nettoyage + filtre 24h",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "RSS – Hacker News (sec)": {
+      "main": [
+        [
+          {
+            "node": "Nettoyage + filtre 24h",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "RSS – AWS": {
+      "main": [
+        [
+          {
+            "node": "Nettoyage + filtre 24h",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "RSS – Google Cloud": {
+      "main": [
+        [
+          {
+            "node": "Nettoyage + filtre 24h",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Nettoyage + filtre 24h": {
+      "main": [
+        [
+          {
+            "node": "Préparer requête Gemini",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Préparer requête Gemini": {
+      "main": [
+        [
+          {
+            "node": "Gemini – Analyse",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini – Analyse": {
+      "main": [
+        [
+          {
+            "node": "Parser réponse",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parser réponse": {
+      "main": [
+        [
+          {
+            "node": "Générer rapport",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Générer rapport": {
+      "main": [
+        [
+          {
+            "node": "Envoi Telegram",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Limit (1 seul email)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Limit (1 seul email)": {
+      "main": [
+        [
+          {
+            "node": "Send an Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {}
+}
